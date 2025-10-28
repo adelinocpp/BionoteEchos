@@ -121,6 +121,7 @@ private:
     QSplitter *m_centralSplitter;
     AudioListWidget *m_audioListWidget;
     AudioVisualizationWidget *m_audioVisualizationWidget;
+    class SpectrogramWidget *m_spectrogramWidget;
     AnnotationLayerWidget *m_annotationLayerWidget;
     AudioControlWidget *m_audioControlWidget;
     
@@ -131,7 +132,7 @@ private:
     std::shared_ptr<AnnotationController> m_annotationController;
     
     // Audio player
-    class AudioPlayer *m_audioPlayer;
+    class CustomAudioPlayer *m_audioPlayer;
     
     // Menus
     QMenu *m_fileMenu;

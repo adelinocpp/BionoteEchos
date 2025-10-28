@@ -85,6 +85,13 @@ public:
     void getVisibleTimeRange(double &startTime, double &endTime) const;
     
     /**
+     * @brief Define a janela de tempo visível
+     * @param startTime Tempo inicial
+     * @param duration Duração da janela
+     */
+    void setVisibleTimeRange(double startTime, double duration);
+    
+    /**
      * @brief Define a seleção de tempo
      * @param startTime Tempo inicial da seleção
      * @param endTime Tempo final da seleção
@@ -103,6 +110,24 @@ public:
      * @return true se há seleção ativa
      */
     bool getTimeSelection(double &startTime, double &endTime) const;
+    
+    /**
+     * @brief Define a posição de reprodução atual
+     * @param timeSeconds Tempo em segundos
+     */
+    void setPlaybackPosition(double timeSeconds);
+    
+    /**
+     * @brief Define se está em modo de reprodução
+     * @param playing true se está reproduzindo
+     */
+    void setPlaying(bool playing);
+    
+    /**
+     * @brief Obtém a posição de reprodução atual
+     * @return Tempo em segundos
+     */
+    double getPlaybackPosition() const { return m_playbackPosition; }
 
 signals:
     /**
@@ -132,18 +157,23 @@ protected:
     void mouseReleaseEvent(QMouseEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
+    void enterEvent(QEnterEvent *event) override;
+    void leaveEvent(QEvent *event) override;
 
 private:
     void drawWaveform(QPainter &painter);
     void drawWaveformDirect(QPainter &painter, const QVector<float>& samples,
                            int startSample, int endSample,
-                           int topMargin, int waveHeight, int centerY);
+                           int leftMargin, int topMargin, int waveHeight, int centerY);
     void drawWaveformDownsampled(QPainter &painter, const QVector<float>& samples,
                                  int startSample, int endSample,
-                                 int topMargin, int waveHeight, int centerY);
+                                 int leftMargin, int topMargin, int waveHeight, int centerY);
+    void drawAmplitudeAxis(QPainter &painter);
     void drawTimeLabels(QPainter &painter);
     void drawSelection(QPainter &painter);
     void drawPlaybackCursor(QPainter &painter);
+    void drawMouseCursor(QPainter &painter);
     
     double pixelToTime(int pixel) const;
     int timeToPixel(double time) const;
@@ -169,12 +199,15 @@ private:
     // Playback cursor
     double m_playbackPosition;
     bool m_isPlaying;
+    class QTimer *m_updateTimer;
     
     // Mouse interaction
     bool m_isDragging;
     bool m_isSelecting;
     QPoint m_lastMousePos;
     int m_dragStartX;
+    bool m_mouseInWidget;
+    QPoint m_currentMousePos;
     
     // Layout
     int m_waveformHeight;

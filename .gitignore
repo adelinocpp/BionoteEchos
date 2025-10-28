@@ -1,9 +1,7 @@
-docs
 build
 .vscode
 .claude
-scripts
-videos
+audios
 examples
 tests
 ../VideoAnimalTracker.tar.gz
@@ -59,6 +57,10 @@ ui_*.h
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Logs
+logs/*.log
+*.log
 
 # Project specific
 *.mp3

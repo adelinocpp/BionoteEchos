@@ -87,6 +87,23 @@ public:
      * @brief Verifica se loop está ativo
      */
     bool isLooping() const;
+    
+    /**
+     * @brief Define região de reprodução (para reproduzir apenas um trecho)
+     * @param startMs Início em milissegundos
+     * @param endMs Fim em milissegundos
+     */
+    void setPlaybackRegion(qint64 startMs, qint64 endMs);
+    
+    /**
+     * @brief Limpa região de reprodução (reproduz arquivo completo)
+     */
+    void clearPlaybackRegion();
+    
+    /**
+     * @brief Verifica se há região de reprodução definida
+     */
+    bool hasPlaybackRegion() const;
 
 signals:
     /**
@@ -128,6 +145,11 @@ private:
     QAudioOutput *m_audioOutput;
     std::shared_ptr<AudioFile> m_audioFile;
     bool m_loopEnabled;
+    bool m_hasPlaybackRegion;
+    qint64 m_regionStartMs;
+    qint64 m_regionEndMs;
+    bool m_isRepositioning; // Flag para evitar loop infinito
+    qint64 m_lastPosition;  // Última posição processada
 };
 
 #endif // AUDIOPLAYER_H

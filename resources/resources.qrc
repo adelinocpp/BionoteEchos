@@ -1,0 +1,7 @@
+<RCC>
+    <qresource prefix="/">
+        <file>icons/Bionote_logo_black.png</file>
+        <file>icons/log_nature_logo_00.png</file>
+        <file>icons/log_yt_02.png</file>
+    </qresource>
+</RCC>

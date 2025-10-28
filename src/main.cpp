@@ -1,4 +1,5 @@
 #include "views/MainWindow.h"
+#include "utils/Logger.h"
 #include <QApplication>
 #include <QLocale>
 #include <QTranslator>
@@ -9,6 +10,10 @@
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
+    
+    // Inicializar sistema de logs
+    Logger::instance();
+    LOG("=== AudioAnnotator Iniciado ===");
     
     // Configurações da aplicação
     QApplication::setApplicationName("AudioAnnotator");

@@ -1,6 +1,10 @@
-# AudioAnnotator
+# BionoteEchos
 
-**AudioAnnotator** é uma aplicação multiplataforma desenvolvida em C++ e Qt6 para anotação de arquivos de áudio com visualização de forma de onda, espectrograma e camadas de anotação compatíveis com o formato TextGrid do Praat.
+**BionoteEchos** é uma aplicação multiplataforma desenvolvida em C++ e Qt6 para anotação de arquivos de áudio com visualização de forma de onda, espectrograma e camadas de anotação compatíveis com o formato TextGrid do Praat.
+
+**Desenvolvido por:** Dr. Adelino Pinheiro Silva  
+**Empresa:** Log Nature  
+**GitHub:** https://github.com/adelinocpp/BionoteEchos
 
 ## Características Principais
 
@@ -68,6 +72,7 @@
 - **Qt6** (Core, Widgets, Multimedia)
 - **FFTW3** (para cálculo de espectrograma)
 - **libsndfile** (para suporte a múltiplos formatos de áudio)
+- **PortAudio** (para reprodução de áudio com baixa latência)
 - **CMake** 3.16 ou superior
 - Compilador C++17 ou superior (GCC, Clang, MSVC)
 
@@ -83,16 +88,16 @@
 ```bash
 # Instalar dependências
 sudo apt-get update
-sudo apt-get install -y qt6-base-dev qt6-multimedia-dev libfftw3-dev libsndfile1-dev cmake build-essential
+sudo apt-get install -y qt6-base-dev qt6-multimedia-dev libfftw3-dev libsndfile1-dev portaudio19-dev cmake build-essential
 
-# Clonar e compilar
-cd AudioAnnotator
-mkdir build && cd build
-cmake ..
-make -j$(nproc)
+# OU usar o script de instalação automática
+./scripts/install-deps.sh
+
+# Compilar
+./scripts/build.sh -d
 
 # Executar
-./bin/AudioAnnotator
+./build-debug/bin/AudioAnnotator
 ```
 
 ### Windows
@@ -322,7 +327,19 @@ Desenvolvido como parte de uma série de aplicações de análise científica em
 - **Qt6**: https://www.qt.io/
 - **FFTW3**: https://www.fftw.org/
 
+## Documentação
+
+Para documentação detalhada, consulte o diretório [`docs/`](docs/):
+
+- **[docs/INDEX.md](docs/INDEX.md)** - Índice completo da documentação
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - Arquitetura do sistema
+- **[docs/CUSTOM_AUDIO_PLAYER.md](docs/CUSTOM_AUDIO_PLAYER.md)** - Sistema de áudio
+- **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** - Guia de desenvolvimento
+
 ## Contato
 
-Para dúvidas, sugestões ou contribuições, entre em contato através do repositório do projeto.
+**Desenvolvedor**: Dr. Adelino Pinheiro Silva  
+**Email**: adelinocpp@gmail.com, adelinocpp@yahoo.com  
+**Empresa**: Log Nature  
+**GitHub**: https://github.com/adelinocpp/BionoteEchos
 

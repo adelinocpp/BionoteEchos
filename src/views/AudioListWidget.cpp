@@ -1,4 +1,5 @@
 #include "views/AudioListWidget.h"
+#include "views/AudioMetadataDialog.h"
 #include "models/Project.h"
 #include "models/AudioFile.h"
 #include <QVBoxLayout>
@@ -197,15 +198,47 @@ void AudioListWidget::onCustomContextMenuRequested(const QPoint &pos)
     
     // Mostrar menu apropriado baseado no tipo
     if (itemType == "audio") {
+        // Obter o AudioFile associado
+        int audioIndex = item->data(0, Qt::UserRole).toInt();
+        std::shared_ptr<AudioFile> audioFile = m_project->getAudioFile(audioIndex);
+        
+        if (!audioFile) {
+            return;
+        }
+        
         // Menu para arquivo de áudio
         QMenu menu(this);
-        menu.addAction("Ver Metadados");
+        
+        QAction *metadataAction = menu.addAction("Ver Metadados");
         menu.addSeparator();
-        menu.addAction("Calcular Pitch (F0)");
-        menu.addAction("Calcular Intensidade");
+        QAction *pitchAction = menu.addAction("Calcular Pitch (F0)");
+        QAction *intensityAction = menu.addAction("Calcular Intensidade");
         menu.addSeparator();
-        menu.addAction("Remover Arquivo");
-        menu.exec(m_treeWidget->viewport()->mapToGlobal(pos));
+        QAction *removeAction = menu.addAction("Remover Arquivo");
+        
+        QAction *selectedAction = menu.exec(m_treeWidget->viewport()->mapToGlobal(pos));
+        
+        if (selectedAction == metadataAction) {
+            // Mostrar diálogo de metadados
+            AudioMetadataDialog dialog(audioFile, this);
+            dialog.exec();
+        } else if (selectedAction == pitchAction) {
+            // TODO: Calcular pitch
+            QMessageBox::information(this, "Pitch", "Cálculo de pitch será implementado em breve");
+        } else if (selectedAction == intensityAction) {
+            // TODO: Calcular intensidade
+            QMessageBox::information(this, "Intensidade", "Cálculo de intensidade será implementado em breve");
+        } else if (selectedAction == removeAction) {
+            // TODO: Remover arquivo
+            QMessageBox::StandardButton reply = QMessageBox::question(
+                this, "Remover Arquivo",
+                "Deseja realmente remover este arquivo do projeto?",
+                QMessageBox::Yes | QMessageBox::No
+            );
+            if (reply == QMessageBox::Yes) {
+                m_project->removeAudioFile(audioIndex);
+            }
+        }
     }
 }
 

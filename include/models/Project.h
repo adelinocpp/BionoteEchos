@@ -108,6 +108,33 @@ public:
      * @brief Cria um novo projeto vazio
      */
     void newProject();
+    
+    /**
+     * @brief Salva o projeto em um arquivo
+     * @param filePath Caminho do arquivo (se vazio, usa m_projectPath)
+     * @return true se salvo com sucesso
+     */
+    bool saveProject(const QString &filePath = QString());
+    
+    /**
+     * @brief Carrega um projeto de um arquivo
+     * @param filePath Caminho do arquivo
+     * @return true se carregado com sucesso
+     */
+    bool loadProject(const QString &filePath);
+    
+    /**
+     * @brief Exporta o projeto para formato JSON
+     * @return String JSON do projeto
+     */
+    QString toJson() const;
+    
+    /**
+     * @brief Importa o projeto de formato JSON
+     * @param json String JSON
+     * @return true se importado com sucesso
+     */
+    bool fromJson(const QString &json);
 
 signals:
     /**

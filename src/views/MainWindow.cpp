@@ -1,15 +1,19 @@
 #include "views/MainWindow.h"
 #include "views/AudioListWidget.h"
 #include "views/AudioVisualizationWidget.h"
+#include "views/SpectrogramWidget.h"
+#include "views/SpectrogramSettingsDialog.h"
 #include "views/AnnotationLayerWidget.h"
 #include "views/AudioControlWidget.h"
+#include "views/AboutDialog.h"
 #include "controllers/ProjectController.h"
 #include "controllers/AudioController.h"
 #include "controllers/AnnotationController.h"
 #include "models/Project.h"
 #include "models/AudioFile.h"
 #include "audio/AudioDecoder.h"
-#include "audio/AudioPlayer.h"
+#include "audio/AudioDecoderWorker.h"
+#include "audio/CustomAudioPlayer.h"
 
 #include <QMenuBar>
 #include <QMenu>
@@ -24,6 +28,9 @@
 #include <QCloseEvent>
 #include <QSettings>
 #include <QApplication>
+#include <QThread>
+#include <QProgressDialog>
+#include <QFileInfo>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -31,6 +38,7 @@ MainWindow::MainWindow(QWidget *parent)
     , m_centralSplitter(nullptr)
     , m_audioListWidget(nullptr)
     , m_audioVisualizationWidget(nullptr)
+    , m_spectrogramWidget(nullptr)
     , m_annotationLayerWidget(nullptr)
     , m_audioControlWidget(nullptr)
     , m_audioPlayer(nullptr)
@@ -42,7 +50,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_annotationController = std::make_shared<AnnotationController>(m_project);
     
     // Create audio player
-    m_audioPlayer = new AudioPlayer(this);
+    m_audioPlayer = new CustomAudioPlayer(this);
     
     // Setup UI
     createActions();
@@ -56,8 +64,9 @@ MainWindow::MainWindow(QWidget *parent)
     loadSettings();
     
     // Set window properties
-    setWindowTitle("AudioAnnotator");
-    resize(1280, 720);
+    setWindowTitle("BionoteEchos");
+    setWindowIcon(QIcon(":/icons/Bionote_logo_black.png"));
+    resize(1200, 800);
     
     updateStatusBar("Pronto");
 }
@@ -100,21 +109,27 @@ void MainWindow::setupLayout()
     centralLayout->setContentsMargins(0, 0, 0, 0);
     centralLayout->setSpacing(0);
     
-    // Create central vertical splitter (visualization | annotation)
+    // Create central vertical splitter (waveform | spectrogram | annotation)
     m_centralSplitter = new QSplitter(Qt::Vertical, this);
     
-    // Create visualization widget
+    // Create visualization widget (waveform)
     m_audioVisualizationWidget = new AudioVisualizationWidget(this);
-    m_audioVisualizationWidget->setMinimumHeight(250);
+    m_audioVisualizationWidget->setMinimumHeight(150);
+    
+    // Create spectrogram widget
+    m_spectrogramWidget = new SpectrogramWidget(this);
+    m_spectrogramWidget->setMinimumHeight(150);
     
     // Create annotation layer widget
     m_annotationLayerWidget = new AnnotationLayerWidget(this);
     m_annotationLayerWidget->setMinimumHeight(100);
     
     m_centralSplitter->addWidget(m_audioVisualizationWidget);
+    m_centralSplitter->addWidget(m_spectrogramWidget);
     m_centralSplitter->addWidget(m_annotationLayerWidget);
-    m_centralSplitter->setStretchFactor(0, 3);  // Mais espaço para visualização
-    m_centralSplitter->setStretchFactor(1, 1);
+    m_centralSplitter->setStretchFactor(0, 2);  // Waveform
+    m_centralSplitter->setStretchFactor(1, 2);  // Spectrogram
+    m_centralSplitter->setStretchFactor(1, 1);  // Annotations
     
     // Add splitter to central panel
     centralLayout->addWidget(m_centralSplitter);
@@ -350,10 +365,19 @@ void MainWindow::connectSignals()
     // Connect audio list signals
     connect(m_audioListWidget, &AudioListWidget::audioFileSelected,
             [this](std::shared_ptr<AudioFile> audioFile) {
+                // Limpar estado anterior
+                m_audioControlWidget->setPosition(0.0);
+                m_audioControlWidget->setPlaying(false);
+                
+                // Configurar novo arquivo
                 m_audioVisualizationWidget->setAudioFile(audioFile);
+                m_spectrogramWidget->setAudioFile(audioFile);
                 m_audioPlayer->setAudioFile(audioFile);
+                
                 if (audioFile) {
                     m_audioControlWidget->setDuration(audioFile->getDuration());
+                } else {
+                    m_audioControlWidget->setDuration(0.0);
                 }
             });
     
@@ -361,43 +385,148 @@ void MainWindow::connectSignals()
     connect(m_audioVisualizationWidget, &AudioVisualizationWidget::visibleTimeRangeChanged,
             m_annotationLayerWidget, &AnnotationLayerWidget::setVisibleTimeRange);
     
+    // Sincronizar zoom/pan entre waveform e espectrograma
+    connect(m_audioVisualizationWidget, &AudioVisualizationWidget::visibleTimeRangeChanged,
+            [this](double startTime, double endTime) {
+                m_spectrogramWidget->setVisibleTimeRange(startTime, endTime - startTime);
+            });
+    
+    connect(m_spectrogramWidget, &SpectrogramWidget::visibleTimeRangeChanged,
+            [this](double startTime, double duration) {
+                m_audioVisualizationWidget->setVisibleTimeRange(startTime, duration);
+                m_annotationLayerWidget->setVisibleTimeRange(startTime, startTime + duration);
+            });
+    
+    // Connect selection to player region
+    connect(m_audioVisualizationWidget, &AudioVisualizationWidget::timeSelectionChanged,
+            [this](double startTime, double endTime) {
+                m_audioPlayer->setPlaybackRegion((qint64)(startTime * 1000), (qint64)(endTime * 1000));
+            });
+    connect(m_audioVisualizationWidget, &AudioVisualizationWidget::timeSelectionCleared,
+            [this]() {
+                m_audioPlayer->clearPlaybackRegion();
+            });
+    
+    // Connect click to position player (Ctrl+Click)
+    connect(m_audioVisualizationWidget, &AudioVisualizationWidget::timeClicked,
+            [this](double timeSeconds) {
+                m_audioPlayer->setPosition((qint64)(timeSeconds * 1000));
+            });
+    
     // Connect audio control signals to player
     connect(m_audioControlWidget, &AudioControlWidget::playClicked,
-            m_audioPlayer, &AudioPlayer::play);
+            m_audioPlayer, &CustomAudioPlayer::play);
     connect(m_audioControlWidget, &AudioControlWidget::pauseClicked,
-            m_audioPlayer, &AudioPlayer::pause);
+            m_audioPlayer, &CustomAudioPlayer::pause);
     connect(m_audioControlWidget, &AudioControlWidget::stopClicked,
-            m_audioPlayer, &AudioPlayer::stop);
+            m_audioPlayer, &CustomAudioPlayer::stop);
     connect(m_audioControlWidget, &AudioControlWidget::volumeChanged,
             [this](int volume) {
                 m_audioPlayer->setVolume(volume / 100.0f);
             });
     connect(m_audioControlWidget, &AudioControlWidget::loopModeChanged,
-            m_audioPlayer, &AudioPlayer::setLoop);
+            m_audioPlayer, &CustomAudioPlayer::setLoop);
     connect(m_audioControlWidget, &AudioControlWidget::positionChanged,
             [this](double seconds) {
                 m_audioPlayer->setPosition((qint64)(seconds * 1000));
             });
     
     // Connect player signals to control widget
-    connect(m_audioPlayer, &AudioPlayer::positionChanged,
+    connect(m_audioPlayer, &CustomAudioPlayer::positionChanged,
             [this](qint64 positionMs) {
-                m_audioControlWidget->setPosition(positionMs / 1000.0);
+                double positionSec = positionMs / 1000.0;
+                m_audioControlWidget->setPosition(positionSec);
+                m_audioVisualizationWidget->setPlaybackPosition(positionSec);
+                m_spectrogramWidget->setPlaybackPosition(positionSec);
             });
-    connect(m_audioPlayer, &AudioPlayer::playbackStateChanged,
-            [this](QMediaPlayer::PlaybackState state) {
-                m_audioControlWidget->setPlaying(state == QMediaPlayer::PlayingState);
+    connect(m_audioPlayer, &CustomAudioPlayer::playbackStateChanged,
+            [this](int state) {
+                bool isPlaying = (state == 1); // 0=Stopped, 1=Playing, 2=Paused
+                m_audioControlWidget->setPlaying(isPlaying);
+                m_audioVisualizationWidget->setPlaying(isPlaying);
             });
     
     // Set initial volume
     m_audioPlayer->setVolume(m_audioControlWidget->getVolume() / 100.0f);
 }
 
-// Stub implementations for slots (to be implemented)
-void MainWindow::onNewProject() { /* TODO */ }
-void MainWindow::onOpenProject() { /* TODO */ }
-void MainWindow::onSaveProject() { /* TODO */ }
-void MainWindow::onSaveProjectAs() { /* TODO */ }
+// Project management implementations
+void MainWindow::onNewProject() {
+    if (!maybeSave()) {
+        return;
+    }
+    
+    m_project->newProject();
+    updateWindowTitle();
+    updateStatusBar("Novo projeto criado");
+}
+
+void MainWindow::onOpenProject() {
+    if (!maybeSave()) {
+        return;
+    }
+    
+    QString fileName = QFileDialog::getOpenFileName(
+        this,
+        "Abrir Projeto",
+        QString(),
+        "Projetos BionoteEchos (*.becho);;Todos os Arquivos (*)"
+    );
+    
+    if (fileName.isEmpty()) {
+        return;
+    }
+    
+    if (m_project->loadProject(fileName)) {
+        updateWindowTitle();
+        updateStatusBar("Projeto carregado: " + fileName);
+        
+        // TODO: Recarregar arquivos de áudio do projeto
+        // Por enquanto, apenas atualizar a lista
+        m_audioListWidget->updateList();
+    } else {
+        QMessageBox::critical(this, "Erro", "Não foi possível carregar o projeto.");
+    }
+}
+
+void MainWindow::onSaveProject() {
+    if (m_project->getProjectPath().isEmpty()) {
+        onSaveProjectAs();
+        return;
+    }
+    
+    if (m_project->saveProject()) {
+        updateWindowTitle();
+        updateStatusBar("Projeto salvo");
+    } else {
+        QMessageBox::critical(this, "Erro", "Não foi possível salvar o projeto.");
+    }
+}
+
+void MainWindow::onSaveProjectAs() {
+    QString fileName = QFileDialog::getSaveFileName(
+        this,
+        "Salvar Projeto Como",
+        QString(),
+        "Projetos BionoteEchos (*.becho);;Todos os Arquivos (*)"
+    );
+    
+    if (fileName.isEmpty()) {
+        return;
+    }
+    
+    // Adicionar extensão se não tiver
+    if (!fileName.endsWith(".becho", Qt::CaseInsensitive)) {
+        fileName += ".becho";
+    }
+    
+    if (m_project->saveProject(fileName)) {
+        updateWindowTitle();
+        updateStatusBar("Projeto salvo como: " + fileName);
+    } else {
+        QMessageBox::critical(this, "Erro", "Não foi possível salvar o projeto.");
+    }
+}
 void MainWindow::onOpenAudioFiles() {
     // Abrir diálogo para seleção de arquivos
     QStringList fileNames = QFileDialog::getOpenFileNames(
@@ -411,14 +540,7 @@ void MainWindow::onOpenAudioFiles() {
         return;
     }
     
-    updateStatusBar(tr("Carregando arquivos de áudio..."));
-    
-    // Criar decodificador
-    AudioDecoder decoder;
-    
-    int successCount = 0;
-    int failCount = 0;
-    
+    // Processar arquivos em thread separada
     for (const QString &fileName : fileNames) {
         // Verificar se o arquivo já está no projeto
         if (m_project->findAudioFile(fileName) >= 0) {
@@ -430,34 +552,46 @@ void MainWindow::onOpenAudioFiles() {
         // Criar novo objeto AudioFile
         auto audioFile = std::make_shared<AudioFile>(fileName);
         
-        // Decodificar arquivo
-        if (decoder.decode(fileName, audioFile)) {
-            // Adicionar ao projeto
-            m_project->addAudioFile(audioFile);
-            successCount++;
+        // Criar thread e worker
+        QThread *thread = new QThread(this);
+        AudioDecoderWorker *worker = new AudioDecoderWorker();
+        worker->moveToThread(thread);
+        
+        // Criar diálogo de progresso
+        QProgressDialog *progress = new QProgressDialog(
+            tr("Carregando %1...").arg(QFileInfo(fileName).fileName()),
+            tr("Cancelar"), 0, 100, this);
+        progress->setWindowModality(Qt::WindowModal);
+        progress->setMinimumDuration(500);
+        
+        // Conectar sinais
+        connect(thread, &QThread::started, [worker, fileName, audioFile]() {
+            worker->decodeFile(fileName, audioFile);
+        });
+        
+        connect(worker, &AudioDecoderWorker::progressUpdated, progress, &QProgressDialog::setValue);
+        
+        connect(worker, &AudioDecoderWorker::decodingFinished,
+                this, [this, audioFile, fileName, thread, worker, progress](bool success, const QString &error) {
+            progress->close();
+            progress->deleteLater();
             
-            updateStatusBar(tr("Arquivo carregado: %1").arg(audioFile->getFileName()));
-        } else {
-            failCount++;
-            QMessageBox::warning(this, tr("Erro ao Carregar Arquivo"),
-                tr("Não foi possível carregar o arquivo:\n%1\n\nErro: %2")
-                .arg(fileName)
-                .arg(decoder.getLastError()));
-        }
-    }
-    
-    // Mensagem de resumo
-    if (successCount > 0) {
-        updateStatusBar(tr("%1 arquivo(s) carregado(s) com sucesso").arg(successCount));
-    }
-    
-    if (successCount > 0 && failCount == 0) {
-        QMessageBox::information(this, tr("AudioAnnotator"),
-            tr("%1 arquivo(s) carregado(s) com sucesso!").arg(successCount));
-    } else if (failCount > 0) {
-        QMessageBox::warning(this, tr("AudioAnnotator"),
-            tr("Resumo:\n%1 arquivo(s) carregado(s)\n%2 arquivo(s) com erro")
-            .arg(successCount).arg(failCount));
+            if (success) {
+                m_project->addAudioFile(audioFile);
+                updateStatusBar(tr("Arquivo carregado: %1").arg(audioFile->getFileName()));
+            } else {
+                QMessageBox::warning(this, tr("Erro ao Carregar Arquivo"),
+                    tr("Não foi possível carregar o arquivo:\n%1\n\nErro: %2")
+                    .arg(fileName).arg(error));
+            }
+            
+            thread->quit();
+        });
+        
+        connect(thread, &QThread::finished, worker, &QObject::deleteLater);
+        connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+        
+        thread->start();
     }
 }
 void MainWindow::onCloseProject() { /* TODO */ }
@@ -477,7 +611,54 @@ void MainWindow::onShowSpectrogram(bool show) {
     m_audioVisualizationWidget->setShowSpectrogram(show);
 }
 
-void MainWindow::onSpectrogramSettings() { /* TODO */ }
+void MainWindow::onSpectrogramSettings()
+{
+    if (!m_spectrogramWidget) {
+        return;
+    }
+    
+    // Obter configurações atuais
+    SpectrogramWidget::Settings currentSettings = m_spectrogramWidget->getSettings();
+    
+    // Converter para formato do diálogo
+    SpectrogramSettingsDialog::Settings dialogSettings;
+    dialogSettings.timeStep = currentSettings.timeStep;
+    dialogSettings.timeWindow = currentSettings.timeWindow;
+    dialogSettings.fftSize = currentSettings.fftSize;
+    dialogSettings.windowType = currentSettings.windowType;
+    dialogSettings.minFrequency = currentSettings.minFrequency;
+    dialogSettings.maxFrequency = currentSettings.maxFrequency;
+    dialogSettings.dynamicRange = currentSettings.dynamicRange;
+    dialogSettings.colorMap = currentSettings.colorMap;
+    dialogSettings.preEmphasis = currentSettings.preEmphasis;
+    dialogSettings.preEmphasisFactor = currentSettings.preEmphasisFactor;
+    
+    // Mostrar diálogo
+    SpectrogramSettingsDialog dialog(dialogSettings, this);
+    if (dialog.exec() == QDialog::Accepted) {
+        // Aplicar novas configurações
+        SpectrogramSettingsDialog::Settings newSettings = dialog.getSettings();
+        
+        SpectrogramWidget::Settings widgetSettings;
+        widgetSettings.timeStep = newSettings.timeStep;
+        widgetSettings.timeWindow = newSettings.timeWindow;
+        widgetSettings.fftSize = newSettings.fftSize;
+        widgetSettings.windowType = newSettings.windowType;
+        widgetSettings.minFrequency = newSettings.minFrequency;
+        widgetSettings.maxFrequency = newSettings.maxFrequency;
+        widgetSettings.dynamicRange = newSettings.dynamicRange;
+        widgetSettings.colorMap = newSettings.colorMap;
+        widgetSettings.preEmphasis = newSettings.preEmphasis;
+        widgetSettings.preEmphasisFactor = newSettings.preEmphasisFactor;
+        
+        m_spectrogramWidget->setSettings(widgetSettings);
+        
+        // Recalcular espectrograma se houver áudio carregado
+        if (m_spectrogramWidget->isCalculating() == false) {
+            m_spectrogramWidget->calculateSpectrogram();
+        }
+    }
+}
 
 void MainWindow::onZoomIn() {
     m_audioVisualizationWidget->zoom(1.5);
@@ -501,24 +682,14 @@ void MainWindow::onCalculateIntensity() { /* TODO */ }
 void MainWindow::onPitchSettings() { /* TODO */ }
 
 void MainWindow::onAbout() {
-    QMessageBox::about(this, tr("About AudioAnnotator"),
-        tr("<h2>AudioAnnotator 1.0</h2>"
-           "<p>A professional audio annotation tool with TextGrid support.</p>"
-           "<p>Features:</p>"
-           "<ul>"
-           "<li>Multi-format audio support (Opus, WAV, MP3, OGG, FLAC)</li>"
-           "<li>Interactive waveform and spectrogram visualization</li>"
-           "<li>Praat TextGrid compatible annotation layers</li>"
-           "<li>Pitch (F0) detection using YAAPT algorithm</li>"
-           "<li>Intensity calculation</li>"
-           "</ul>"
-           "<p>Built with Qt6, FFTW3, and libsndfile.</p>"));
+    AboutDialog dialog(this);
+    dialog.exec();
 }
 
 void MainWindow::onHelp() { /* TODO */ }
 
 void MainWindow::updateWindowTitle() {
-    QString title = tr("AudioAnnotator");
+    QString title = "BionoteEchos";
     if (!m_project->getProjectPath().isEmpty()) {
         title += " - " + m_project->getProjectName();
     }

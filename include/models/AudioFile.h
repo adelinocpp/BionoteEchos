@@ -1,9 +1,10 @@
 #ifndef AUDIOFILE_H
 #define AUDIOFILE_H
 
+#include <QObject>
 #include <QString>
 #include <QVector>
-#include <QObject>
+#include <QImage>
 #include <memory>
 
 /**
@@ -72,6 +73,20 @@ public:
     void setSamples(int channel, const QVector<float> &samples);
     void setPitchData(const QVector<float> &pitchData);
     void setIntensityData(const QVector<float> &intensityData);
+    
+    // Spectrogram cache
+    bool hasSpectrogramCache(const QString &settingsHash) const { 
+        return !m_spectrogramCache.isNull() && m_spectrogramCacheHash == settingsHash; 
+    }
+    QImage getSpectrogramCache() const { return m_spectrogramCache; }
+    void setSpectrogramCache(const QImage &spectrogram, const QString &settingsHash) { 
+        m_spectrogramCache = spectrogram; 
+        m_spectrogramCacheHash = settingsHash;
+    }
+    void clearSpectrogramCache() { 
+        m_spectrogramCache = QImage(); 
+        m_spectrogramCacheHash.clear();
+    }
     
     /**
      * @brief Carrega o arquivo de áudio
@@ -145,6 +160,10 @@ private:
     
     bool m_hasIntensityData;
     QVector<float> m_intensityData;
+    
+    // Spectrogram cache
+    QImage m_spectrogramCache;
+    QString m_spectrogramCacheHash;
 };
 
 #endif // AUDIOFILE_H
