@@ -1,0 +1,74 @@
+docs
+build
+.vscode
+.claude
+scripts
+videos
+examples
+tests
+../VideoAnimalTracker.tar.gz
+../Prompt.txt
+
+
+# Build directories
+build/
+build-*/
+cmake-build-*/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# Qt
+*.pro.user
+*.pro.user.*
+*.qm
+*.autosave
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+
+# C++
+*.o
+*.obj
+*.so
+*.dll
+*.dylib
+*.a
+*.lib
+*.exe
+*.out
+*.app
+
+# IDE
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Project specific
+*.mp3
+*.wav
+*.ogg
+*.opus
+*.json
+*.csv
+!resources.qrc
+annotations/
+projects/
+videos/
+
